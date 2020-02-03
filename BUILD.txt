@@ -1,0 +1,3 @@
+sound2tia is a simple utility, with just a simple makefile. Ensure you have
+the fftw and libsndfile libraries installed on your build system, and type
+"make". 
