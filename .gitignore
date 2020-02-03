@@ -40,4 +40,8 @@
 
 ########## project specific ignores ##########
 sound2tia
-
+contrib
+contrib/*
+makefile.*
+release
+release/*
