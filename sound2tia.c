@@ -13,8 +13,8 @@
 #include <unistd.h>
 #include "tiavals.h"
 
-#include "tia-fft-1.h"		// TIA frequencies in every phase, window size=1
-#include "tia-fft-2.h"		// TIA frequencies in every phase, window size=2
+#include "tia-fft-1.h"		// TIA frequencies in varying phase, window size=1
+#include "tia-fft-2.h"		// TIA frequencies in varying phase, window size=2
 
 int FFTDATASIZE[] = { 0, 269, 539 };
 
@@ -22,7 +22,10 @@ int SLICES;
 long SAMPLERATE;
 
 int WINDOWSIZE = 2;
-int lowpass = 0;
+int lowpass = -1;
+int highpass = -1; // 1 Hz
+int highpassfreq;
+int highpassindex = 1;
 
 int N, N_OUT;
 long samplecount;
@@ -36,8 +39,6 @@ double samplemax;
 
 int loadwave(char *filename);
 void usage(char *programname);
-double findmedian(double *farray, int count);
-double findaverage(double *farray, int count);
 
 
 int main(int argc, char **argv)
@@ -51,8 +52,6 @@ int main(int argc, char **argv)
     long t;
 
     int outformat = 0;
-    int medianlevel = 0;
-    int blurlevel = 0;
     double frequencyscale = 1.0;
     int halfrate = 0;
 
@@ -68,7 +67,7 @@ int main(int argc, char **argv)
     windowindex = 0;
     SLICES = 60;
 
-    while ((c = getopt(argc, argv, ":i:ho:m:b:s:a:")) != -1)
+    while ((c = getopt(argc, argv, ":i:to:m:b:s:a:l:h:")) != -1)
     {
 	switch (c)
 	{
@@ -83,12 +82,6 @@ int main(int argc, char **argv)
 		errflg++;
 	    }
 	    break;
-	case 'm':
-	    medianlevel = atoi(optarg);
-	    break;
-	case 'b':
-	    blurlevel = atoi(optarg);
-	    break;
 	case 'a':
 	    algorithm = atoi(optarg);
 	    if ((algorithm > 2) || (algorithm < 0))
@@ -100,6 +93,9 @@ int main(int argc, char **argv)
 	    {
 		WINDOWSIZE = algorithm;
 	    }
+            // check if a high pass filter argument was already used, and adjust if necessary
+            if( (WINDOWSIZE==1) && (highpassindex>1) ) 
+                highpassindex = highpassindex / 2; 
 	    break;
 	case 's':
 	    frequencyscale = atof(optarg);
@@ -108,10 +104,30 @@ int main(int argc, char **argv)
 	    fprintf(stderr, "*** ERR: option -%c requires an operand\n", optopt);
 	    errflg++;
 	    break;
-	case 'h':
+	case 't':
 	    halfrate = 1;
 	    SLICES = 30;
 	    break;
+	case 'l':
+	    lowpass = atoi(optarg);
+	    if (lowpass <1 )
+	    {
+		fprintf(stderr, "*** ERR: lowpass value isn't valid.\n");
+		errflg++;
+	    }
+	    break;
+	case 'h':
+	    highpassfreq = atoi(optarg);
+	    if (highpassfreq <1 )
+	    {
+		fprintf(stderr, "*** ERR: highpass value isn't valid.\n");
+		errflg++;
+            }
+            // calculate the index # that corresponds to that frequency
+            highpassindex = (float) highpassfreq / (SLICES/WINDOWSIZE) ;
+            if (highpassindex == 0)
+                highpassindex = 1;
+            break;
 	case '?':
 	    fprintf(stderr, "*** ERR: unrecognised option \"-%c\"\n", optopt);
 	    errflg++;
@@ -199,7 +215,7 @@ int main(int argc, char **argv)
 	maximumfftfreq1 = 0;
 
 	float currentfftval;
-	for (t = 1; t < N / 2; t++)
+	for (t = highpassindex; t < N / 2; t++)
 	{
 	    // we use 1.25 instead of 1 to favor fundamentals. 
 	    // Ideally this should be made tunable...
@@ -230,7 +246,7 @@ int main(int argc, char **argv)
 	    else
 	    {
 		int peakvolume = 0;
-		for (t = 0; t < N; t++)
+		for (t = highpassindex; t < N; t++)
 		{
 		    if (peakvolume < (int) fabs(in[t]) * 15.0 / 100.0)
 			peakvolume = (int) fabs(in[t]) * 15.0 / 100.0;
@@ -262,7 +278,7 @@ int main(int argc, char **argv)
 		    for (tiaindex = 0; fftlists_1[tiaindex] != NULL; tiaindex++)
 		    {
 			currentscore = 0;
-			for (t = 1; t <= maxhigh; t++)
+			for (t = highpassindex; t <= maxhigh; t++)
 			    currentscore +=
 				fabs((float) fftlists_1[tiaindex][t] - ((out[t][1] * 200.0) / maximumfftval1));
 			if (currentscore < bestscore)
@@ -278,10 +294,12 @@ int main(int argc, char **argv)
 		}
 		else
 		{
+                    // TODO: join the data structures for fft1 and fft2 better, so this code block
+                    // doesn't need to essentially be a duplicate of the above one.
 		    for (tiaindex = 0; fftlists_2[tiaindex] != NULL; tiaindex++)
 		    {
 			currentscore = 0;
-			for (t = 1; t <= maxhigh; t++)
+			for (t = highpassindex; t <= maxhigh; t++)
 			    currentscore +=
 				fabs((float) fftlists_2[tiaindex][t] - ((out[t][1] * 200.0) / maximumfftval1));
 			if (currentscore < bestscore)
@@ -323,28 +341,6 @@ int main(int argc, char **argv)
 
     if (algorithm == 0)
     {
-	if (medianlevel > 0)
-	{
-	    // median filtering is specified
-	    for (windowindex = 0; windowindex < ((samplecount * WINDOWSIZE / N) - medianlevel);
-		 windowindex = windowindex + 1)
-	    {
-		frequency1[windowindex] = findmedian(frequency1 + windowindex, medianlevel);
-	    }
-
-	}
-
-	if (blurlevel > 0)
-	{
-	    // average filtering is specified
-	    for (windowindex = 0; windowindex < ((samplecount * WINDOWSIZE / N) - blurlevel);
-		 windowindex = windowindex + 1)
-	    {
-		frequency1[windowindex] = findaverage(frequency1 + windowindex, blurlevel);
-	    }
-
-	}
-
 	if (frequencyscale != 1.0)
 	{
 	    // frequency scaling is specified
@@ -465,45 +461,6 @@ int main(int argc, char **argv)
     return (0);
 }
 
-double findmedian(double *farray, int count)
-{
-    int s, t;
-    double temparray[255];
-    double tempvalue;
-
-    //transfer the values to a temp array
-    for (t = 0; t < count; t++)
-	temparray[t] = farray[t];
-
-    //sort the elements of the temp array
-    for (t = 0; t < (count - 1); t++)
-    {
-	for (s = t + 1; s < count; s++)
-	{
-	    if (s == t)
-		continue;
-	    if (temparray[s] < temparray[t])
-	    {
-		tempvalue = temparray[s];
-		temparray[s] = temparray[t];
-		temparray[t] = tempvalue;
-	    }
-	}
-    }
-
-    return (temparray[count / 2]);
-}
-
-double findaverage(double *farray, int count)
-{
-    int t;
-    double tempvalue;
-    tempvalue = 0;
-    for (t = 0; t < count; t++)
-	tempvalue = tempvalue + farray[t];
-    return (tempvalue / count);
-}
-
 
 int loadwave(char *filename)
 {
@@ -585,13 +542,13 @@ int loadwave(char *filename)
 void usage(char *programname)
 {
     fprintf(stderr, "%s %s %s\n", PROGNAME, __DATE__, __TIME__);
-    fprintf(stderr, "Usage: %s -i INPUTFILE [-o OUTFORMAT] [-z] [-m #] [-b #] [-s #] [-h]\n", programname);
+    fprintf(stderr, "Usage: %s -i INPUTFILE [-o OUTFORMAT] [-a #] [-s #] [-t] [-l #] [-h #]\n", programname);
     fprintf(stderr, "       where INPUTFILE is a mono or stereo WAV, OGG, or FLAC file.\n");
     fprintf(stderr, "             OUTPUTFORMAT is 0 for raw, 1 for bB, 2 for asm, 3 for 7800basic.\n");
     fprintf(stderr, "             -a # is freqency match algorithm. 0=peak (default) 1=fft1 2=fft2.\n");
-    fprintf(stderr, "             -m # is median filtering level. e.g. -m 3, -m 5, etc.\n");
-    fprintf(stderr, "             -b # is blur/average filter . e.g. -b 2, -b 3, etc.\n");
     fprintf(stderr, "             -s # is frequency scale. e.g. -f 0.5 lowers frequencies in half.\n");
-    fprintf(stderr, "             -h is half-rate. provides TIA data intended to play at 30Hz.\n");
+    fprintf(stderr, "             -t provides TIA data intended to play at 30Hz.\n");
+    fprintf(stderr, "             -l # is a low pass filter, with value in hz. e.g. -l 4000\n");
+    fprintf(stderr, "             -h # is a high pass filter, with value in hz. e.g. -l 120\n");
     fprintf(stderr, "\n");
 }
