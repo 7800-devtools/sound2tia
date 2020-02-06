@@ -588,7 +588,7 @@ void usage(char *programname)
     fprintf(stderr, "Usage: %s -i INPUTFILE [-o OUTFORMAT] [-z] [-m #] [-b #] [-s #] [-h]\n", programname);
     fprintf(stderr, "       where INPUTFILE is a mono or stereo WAV, OGG, or FLAC file.\n");
     fprintf(stderr, "             OUTPUTFORMAT is 0 for raw, 1 for bB, 2 for asm, 3 for 7800basic.\n");
-    fprintf(stderr, "             -a is freqency match algorithm. 0=peak (default) 1=fft1 2=fft2.\n");
+    fprintf(stderr, "             -a # is freqency match algorithm. 0=peak (default) 1=fft1 2=fft2.\n");
     fprintf(stderr, "             -m # is median filtering level. e.g. -m 3, -m 5, etc.\n");
     fprintf(stderr, "             -b # is blur/average filter . e.g. -b 2, -b 3, etc.\n");
     fprintf(stderr, "             -s # is frequency scale. e.g. -f 0.5 lowers frequencies in half.\n");
