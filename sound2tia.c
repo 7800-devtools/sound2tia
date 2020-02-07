@@ -23,6 +23,8 @@ long SAMPLERATE;
 
 int WINDOWSIZE = 2;
 int lowpass = -1;
+int lowpassfreq;
+int lowpassindex = 1;
 int highpass = -1; // 1 Hz
 int highpassfreq;
 int highpassindex = 1;
@@ -109,13 +111,17 @@ int main(int argc, char **argv)
 	    SLICES = 30;
 	    break;
 	case 'l':
-	    lowpass = atoi(optarg);
-	    if (lowpass <1 )
+	    lowpassfreq = atoi(optarg);
+	    if (lowpassfreq <1 )
 	    {
 		fprintf(stderr, "*** ERR: lowpass value isn't valid.\n");
 		errflg++;
 	    }
-	    break;
+            // calculate the index # that corresponds to that frequency
+            lowpassindex = (float) lowpassfreq / (SLICES/WINDOWSIZE) ;
+            if (lowpassindex == 0)
+                lowpassindex = 1;
+            break;
 	case 'h':
 	    highpassfreq = atoi(optarg);
 	    if (highpassfreq <1 )
